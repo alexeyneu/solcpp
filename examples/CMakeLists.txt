@@ -1,4 +1,7 @@
+find_package(CURL REQUIRED) 
+
 include_directories(${solcpp_SOURCE_DIR}/include)
+include_directories(${CURL_INCLUDE_DIR})
 
 # examples
 add_executable(example-get-account-info getAccountInfo.cpp)
@@ -11,7 +14,8 @@ add_executable(example-positions positions.cpp)
 target_link_libraries(example-get-account-info ${CONAN_LIBS} sol)
 target_link_libraries(example-account-subscribe ${CONAN_LIBS} sol)
 target_link_libraries(example-send-transaction ${CONAN_LIBS} sol)
-target_link_libraries(example-place-order ${CONAN_LIBS} sol)
+
+target_link_libraries(example-place-order ${CONAN_LIBS} ${CURL_LIBRARIES} sol)
 target_link_libraries(example-positions ${CONAN_LIBS} sol)
 
 target_compile_definitions(example-place-order PUBLIC FIXTURES_DIR="${CMAKE_SOURCE_DIR}/tests/fixtures")
