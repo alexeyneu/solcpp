@@ -4,7 +4,7 @@ A fast C++ SDK to interact with Solana and Mango Markets. The SDK also includes 
 If you are experienced in c++ dev and want to work on this full-time, contact [@m_schneider](https://twitter.com/m_schneider) on Twitter.
 ## robots
 
- `placeOrder.cpp `  `sendTransaction.cpp` for two different ports of pine-bot-server. Both are for buy then sell (growing market). solperp trading so sell then buy can be done also.
+ `placeOrder.cpp `  `sendTransaction.cpp` for two different ports of `pine-bot-server`. Both are for buy then sell (growing market). solperp trading so sell then buy can be done also.
    
    
    
