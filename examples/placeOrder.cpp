@@ -18,12 +18,7 @@ std::condition_variable li;
 std::atomic<bool> tro;
 
 using json = nlohmann::json;
-size_t CurlWrite(void* contents, size_t size, size_t nmemb, std::stringstream* b)
-{
-    size_t newLength = size * nmemb;
-    b->write((char*)contents, newLength);
-    return newLength;
-}
+
 int main() 
 {
   std::pair<std::pair<bool,bool>,bool> buy({}, !false);
@@ -32,7 +27,6 @@ int main()
   int q;
 	CURL *curl;
 	CURL *f;
-  CURLcode res;
 
     curl = curl_easy_init();
     f = curl_easy_init();
@@ -112,48 +106,44 @@ curl_easy_perform(curl);
       const auto timeoutBlockHeight =
         recentBlockHash.lastValidBlockHeight +
         mango_v3::MAXIMUM_NUMBER_OF_BLOCKS_FOR_TRANSACTION;
-        do{
-    while (!false) {
-        // Check if we are past validBlockHeight
-        auto currentBlockHeight = connection.getBlockHeight("confirmed");
-        if (timeoutBlockHeight <= currentBlockHeight) {
-          spdlog::error("Timed out for txid: {}, current BlockHeight: {}", b58Sig,
-                        currentBlockHeight);
-          break;
-        }
-        const json req = connection.getSignatureStatuses({b58Sig});
-        const std::string jsonSerialized = req.dump();
-        spdlog::info("REQ: {}", jsonSerialized);
+      do
+      {
+        while (!false) {
+            // Check if we are past validBlockHeight
+            auto currentBlockHeight = connection.getBlockHeight("confirmed");
+            if (timeoutBlockHeight <= currentBlockHeight) {
+              spdlog::error("Timed out for txid: {}, current BlockHeight: {}", b58Sig,
+                            currentBlockHeight);
+              break;
+            }
+            const json req = connection.getSignatureStatuses({b58Sig});
+            const std::string jsonSerialized = req.dump();
+            spdlog::info("REQ: {}", jsonSerialized);
 
-        std::stringstream ent_f;
-	        struct curl_slist *headers = NULL;
-	      headers = curl_slist_append(headers, "Expect:");
+            std::stringstream ent_f;
+    	       struct curl_slist *headers = NULL;
+    	      headers = curl_slist_append(headers, "Expect:");
             headers = curl_slist_append(headers, "Content-Type: application/json");
-	
-                     curl_easy_setopt(f, CURLOPT_URL, config.endpoint.c_str());
-                           curl_easy_setopt(f, CURLOPT_COPYPOSTFIELDS, jsonSerialized.c_str());
-			   curl_easy_setopt(f, CURLOPT_POST, 1);
-		                                     curl_easy_setopt(f, CURLOPT_WRITEFUNCTION, CurlWrite);
-	
-	curl_easy_setopt(f, CURLOPT_WRITEDATA, &ent_f);
-                                                              curl_easy_setopt(f, CURLOPT_FAILONERROR, 1);
-							      curl_easy_setopt(f, CURLOPT_HTTPHEADER, headers);
-		                                  CURLcode b = curl_easy_perform(f);
-		
-		                                                                                      curl_slist_free_all(headers);
-		                                                             if (b == CURLE_OK) {
-		                                                               std::string e_f(ent_f.str());
-		                                                                   spdlog::info("RES: {}", e_f.c_str());
-		                                                        json res = json::parse(e_f.c_str());
-		                                                          if (res["result"]["value"][0] != nullptr) { sell.first.second= false;sell.second= false;buy.second = !false; break; }
-		                                                        } else {
-		                                                         spdlog::error("Error: {}",   curl_easy_strerror(b));
-		                                                         break;
-		                                                       }
-
-    	}
-        }while(sell.second== !false);
-  }
+            curl_easy_setopt(f, CURLOPT_URL, config.endpoint.c_str());
+            curl_easy_setopt(f, CURLOPT_COPYPOSTFIELDS, jsonSerialized.c_str());
+            curl_easy_setopt(f, CURLOPT_POST, 1);
+    		    curl_easy_setopt(f, CURLOPT_WRITEFUNCTION, CurlWrite);
+            curl_easy_setopt(f, CURLOPT_WRITEDATA, &ent_f);
+            curl_easy_setopt(f, CURLOPT_HTTPHEADER, headers);
+    		    CURLcode b = curl_easy_perform(f);
+    		    curl_slist_free_all(headers);
+    		    if (b == CURLE_OK) {
+    		      std::string e_f(ent_f.str());
+                       spdlog::info("RES: {}", e_f.c_str());
+            json res = json::parse(e_f.c_str());
+              if (res["result"]["value"][0] != nullptr) { sell.first.second= false;sell.second= false;buy.second = !false; break; }
+            } else {
+             spdlog::error("Error: {}",   curl_easy_strerror(b));
+             break;
+           }
+        }
+      }while(sell.second== !false);
+    }
     if((buy.first.first == !false) && (buy.second == !false))
     {
 	    buy.first.first= false;
@@ -232,19 +222,19 @@ curl_easy_perform(curl);
 	curl_easy_setopt(f, CURLOPT_COPYPOSTFIELDS, jsonSerialized.c_str());
 	curl_easy_setopt(f, CURLOPT_POST, 1);
 	curl_easy_setopt(f, CURLOPT_WRITEFUNCTION, CurlWrite);
-    	curl_easy_setopt(f, CURLOPT_WRITEDATA, &ent_f);
+  curl_easy_setopt(f, CURLOPT_WRITEDATA, &ent_f);
 	curl_easy_setopt(f, CURLOPT_FAILONERROR, 1);
 	curl_easy_setopt(f, CURLOPT_HTTPHEADER, headers);
 	CURLcode b = curl_easy_perform(f);
 
 	curl_slist_free_all(headers);
-        if (b == CURLE_OK) {
-                std::string e_f(ent_f.str());
+  if (b == CURLE_OK) {
+    std::string e_f(ent_f.str());
 		spdlog::info("RES: {}", e_f.c_str());
 		json res = json::parse(e_f.c_str());
-	        if (res["result"]["value"][0] != nullptr) { sell.first.second= false;buy.second= false;sell.second = !false; break; }
-
-        } else {
+	        if (res["result"]["value"][0] == nullptr) ;
+          else { sell.first.second = false; buy.second = false; sell.second = !false; break; }
+    } else {
 		spdlog::error("Error: {}",   curl_easy_strerror(b));
 		break;
 	}

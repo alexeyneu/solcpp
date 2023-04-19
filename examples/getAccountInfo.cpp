@@ -1,5 +1,5 @@
-#include <cpr/cpr.h>
 #include <spdlog/spdlog.h>
+#include <curl/curl.h>
 
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
@@ -14,17 +14,31 @@ int main() {
       "98pjRuQjK3qA6gXts96PqZT4Ze5QmnCmt3QYjhbUSPue");
   const std::string jsonSerialized = req.dump();
   spdlog::info("REQ: {}", jsonSerialized);
+  CURL *f= curl_easy_init();
+  std::stringstream ent_f;
+  struct curl_slist *headers = NULL;
+  headers = curl_slist_append(headers, "Content-Type: application/json");
 
-  cpr::Response r =
-      cpr::Post(cpr::Url{rpc_url}, cpr::Body{jsonSerialized.c_str()},
-                cpr::Header{{"Content-Type", "application/json"}});
+  curl_easy_setopt(f, CURLOPT_URL, rpc_url.c_str());
+  curl_easy_setopt(f, CURLOPT_COPYPOSTFIELDS, jsonSerialized.c_str());
+  curl_easy_setopt(f, CURLOPT_POST, 1);
+  curl_easy_setopt(f, CURLOPT_WRITEFUNCTION, CurlWrite);
+  curl_easy_setopt(f, CURLOPT_WRITEDATA, &ent_f);
+  curl_easy_setopt(f, CURLOPT_FAILONERROR, 1);
+  curl_easy_setopt(f, CURLOPT_HTTPHEADER, headers);
+  CURLcode b = curl_easy_perform(f);
 
-  if (r.status_code == 0 || r.status_code >= 400) {
-    spdlog::error("Error: {}, {}", r.status_code, r.error.message);
+  curl_slist_free_all(headers);
+
+
+  if ((b == CURLE_OK) == false) {
+    spdlog::error("Error");
     return 1;
   } else {
-    spdlog::info("RES: {}", r.text);
-    json res = json::parse(r.text);
+
+    std::string e_f(ent_f.str());
+    spdlog::info("RES: {}", e_f.c_str());
+    json res = json::parse(e_f.c_str());
 
     const std::string encoded = res["result"]["value"]["data"][0];
     const std::string decoded = solana::b64decode(encoded);

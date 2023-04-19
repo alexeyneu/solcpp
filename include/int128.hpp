@@ -5,7 +5,7 @@
 #include <string>
 
 std::ostream &operator<<(std::ostream &out, __uint128_t x) {
-  if (x >= 10) out << x / 10;
+  if (x > 9) out << x / 10;
   return out << static_cast<unsigned>(x % 10);
 }
 

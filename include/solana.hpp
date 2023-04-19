@@ -1,7 +1,7 @@
 #pragma once
 
-#include <cpr/cpr.h>
 #include <sodium.h>
+#include <curl/curl.h>
 
 #include <fstream>
 #include <iostream>
@@ -10,6 +10,13 @@
 
 #include "base58.hpp"
 #include "base64.hpp"
+
+inline size_t CurlWrite(void* contents, size_t size, size_t nmemb, std::stringstream* b)
+{
+    size_t newLength = size * nmemb;
+    b->write((char *)contents, newLength);
+    return newLength;
+}
 
 namespace solana {
 using json = nlohmann::json;
@@ -30,18 +37,20 @@ struct PublicKey {
   static PublicKey fromBase58(const std::string &b58) {
     PublicKey result = {};
     size_t decodedSize = SIZE;
-    const auto ok = b58tobin(result.data.data(), &decodedSize, b58.c_str(), 0);
-    if (!ok) throw std::runtime_error("invalid base58 '" + b58 + "'");
-    if (decodedSize != SIZE)
-      throw std::runtime_error("not a valid PublicKey '" +
-                               std::to_string(decodedSize) +
-                               " != " + std::to_string(SIZE) + "'");
+    auto f = b58decode(b58);
+    if(f.first < 0) throw std::runtime_error("invalid base58 '" + b58 + "'");
+    if (f.second.size() == decodedSize) ;
+    else
+      throw std::runtime_error("not a valid PublicKey '" + 
+                               std::to_string(f.second.size()) +
+                               " vs " + std::to_string(SIZE) + "'");
+    std::copy_n(f.second.begin(), f.second.size(), result.data.begin());
     return result;
   }
 
   bool operator==(const PublicKey &other) const { return data == other.data; }
 
-  std::string toBase58() const { return b58encode(data); }
+  std::string toBase58() const { return b58encode(data).second; }
 };
 
 struct PrivateKey {
@@ -53,10 +62,11 @@ struct PrivateKey {
   std::vector<uint8_t> signMessage(const std::vector<uint8_t> message) const {
     uint8_t sig[crypto_sign_BYTES];
     unsigned long long sigSize;
-    if (0 != crypto_sign_detached(sig, &sigSize, message.data(), message.size(),
-                                  data.data()))
+    if (crypto_sign_detached(sig, &sigSize, message.data(), message.size(),
+                                  data.data()) == 0) 
+      return std::vector<uint8_t>(sig, sig + sigSize);
+    else
       throw std::runtime_error("could not sign tx with private key");
-    return std::vector<uint8_t>(sig, sig + sigSize);
   }
 };
 
@@ -237,7 +247,9 @@ using json = nlohmann::json;
 inline json jsonRequest(const std::string &method,
                         const json &params = nullptr) {
   json req = {{"jsonrpc", "2.0"}, {"id", 1}, {"method", method}};
-  if (params != nullptr) req["params"] = params;
+  if (params == nullptr) ;
+  else
+    req["params"] = params;
   return req;
 }
 // Read AccountInfo dumped in a file
@@ -248,10 +260,11 @@ static T fromFile(const std::string &path) {
   auto response = json::parse(fileContent);
   const std::string encoded = response["data"][0];
   const std::string decoded = solana::b64decode(encoded);
-  if (decoded.size() != sizeof(T))
+  if (decoded.size() == sizeof(T)) ;
+  else
     throw std::runtime_error("Invalid account data");
   T accountInfo{};
-  memcpy(&accountInfo, decoded.data(), sizeof(T));
+  memcpy(&accountInfo, &decoded[0], sizeof(T));
   return accountInfo;
 }
 ///
@@ -263,6 +276,8 @@ class Connection {
   Connection(const std::string &rpc_url = MAINNET_BETA,
              const std::string &commitment = "finalized");
   ///
+  CURL *f;
+  struct curl_slist *headers;
 
   /// 1. Build requests
   ///
@@ -297,23 +312,33 @@ class Connection {
                           const std::string &encoding = "base64",
                           const size_t offset = 0, const size_t length = 0) {
     const json req = getAccountInfoRequest(account, encoding, offset, length);
-    cpr::Response r =
-        cpr::Post(cpr::Url{rpc_url_}, cpr::Body{req.dump()},
-                  cpr::Header{{"Content-Type", "application/json"}});
-    if (r.status_code != 200)
-      throw std::runtime_error("unexpected status_code " +
-                               std::to_string(r.status_code));
+    std::stringstream ent_f;
+    const std::string jsonSerialized = req.dump();
 
-    json res = json::parse(r.text);
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+    curl_easy_setopt(f, CURLOPT_URL, rpc_url_.c_str());
+    curl_easy_setopt(f, CURLOPT_COPYPOSTFIELDS, jsonSerialized.c_str());
+    curl_easy_setopt(f, CURLOPT_POST, 1);
+    curl_easy_setopt(f, CURLOPT_WRITEFUNCTION, CurlWrite);
+    curl_easy_setopt(f, CURLOPT_WRITEDATA, &ent_f);
+    curl_easy_setopt(f, CURLOPT_FAILONERROR, 1);
+    curl_easy_setopt(f, CURLOPT_HTTPHEADER, headers);
+    CURLcode b = curl_easy_perform(f);
+    curl_slist_free_all(headers);
+    if (b == CURLE_OK) ;
+    else
+      throw std::runtime_error("unexpected status_code ");
+
+    json res = json::parse(ent_f.str().c_str());
     const std::string encoded = res["result"]["value"]["data"][0];
     const std::string decoded = b64decode(encoded);
-    if (decoded.size() != sizeof(T))  // decoded should fit into T
+    if (decoded.size() == sizeof(T)) ; // decoded should fit into T
+    else
       throw std::runtime_error("invalid response length " +
                                std::to_string(decoded.size()) + " expected " +
                                std::to_string(sizeof(T)));
-
     T result{};
-    memcpy(&result, decoded.data(), sizeof(T));
+    memcpy(&result, &decoded[0], sizeof(T));
     return result;
   }
   /// Returns account information for a list of pubKeys
@@ -326,14 +351,24 @@ class Connection {
       const size_t length = 0) {
     const json req =
         getMultipleAccountsRequest(accounts, encoding, offset, length);
-    cpr::Response r =
-        cpr::Post(cpr::Url{rpc_url_}, cpr::Body{req.dump()},
-                  cpr::Header{{"Content-Type", "application/json"}});
-    if (r.status_code != 200)
-      throw std::runtime_error("unexpected status_code " +
-                               std::to_string(r.status_code));
+    std::stringstream ent_f;
+    const std::string jsonSerialized = req.dump();
 
-    json res = json::parse(r.text);
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+    curl_easy_setopt(f, CURLOPT_URL, rpc_url_.c_str());
+    curl_easy_setopt(f, CURLOPT_COPYPOSTFIELDS, jsonSerialized.c_str());
+    curl_easy_setopt(f, CURLOPT_POST, 1);
+    curl_easy_setopt(f, CURLOPT_WRITEFUNCTION, CurlWrite);
+    curl_easy_setopt(f, CURLOPT_WRITEDATA, &ent_f);
+    curl_easy_setopt(f, CURLOPT_FAILONERROR, 1);
+    curl_easy_setopt(f, CURLOPT_HTTPHEADER, headers);
+    CURLcode b = curl_easy_perform(f);
+    curl_slist_free_all(headers);
+    if (b == CURLE_OK) ;
+    else
+      throw std::runtime_error("unexpected status_code ");    
+    json res = json::parse(ent_f.str().c_str());
+
     const auto &account_info_vec = res["result"]["value"];
     std::map<std::string, T> result;
     int index = -1;
@@ -342,12 +377,13 @@ class Connection {
       if (account_info.is_null()) continue;  // Account doesn't exist
       const std::string encoded = account_info["data"][0];
       const std::string decoded = b64decode(encoded);
-      if (decoded.size() != sizeof(T))
+      if (decoded.size() == sizeof(T)) ;
+      else
         throw std::runtime_error("invalid response length " +
                                  std::to_string(decoded.size()) + " expected " +
                                  std::to_string(sizeof(T)));
       T account{};
-      memcpy(&account, decoded.data(), sizeof(T));
+      memcpy(&account, &decoded[0], sizeof(T));
       result[req["params"][0][index]] = account;  // Retrieve the corresponding
                                                   // pubKey from the request
     }

@@ -1,6 +1,4 @@
-#include <cpr/cpr.h>
 #include <sodium.h>
-
 #include <solana.hpp>
 
 namespace solana {
@@ -9,6 +7,9 @@ Connection::Connection(const std::string &rpc_url,
                        const std::string &commitment)
     : rpc_url_(std::move(rpc_url)), commitment_(std::move(commitment)) {
   auto sodium_result = sodium_init();
+  f = curl_easy_init();
+  headers = NULL;
+
   if (sodium_result < -1)
     throw std::runtime_error("Error initializing sodium: " +
                              std::to_string(sodium_result));
@@ -73,25 +74,47 @@ json Connection::sendTransactionRequest(
 PublicKey Connection::getRecentBlockhash_DEPRECATED(
     const std::string &commitment) {
   const json req = getBlockhashRequest(commitment);
-  cpr::Response r =
-      cpr::Post(cpr::Url{rpc_url_}, cpr::Body{req.dump()},
-                cpr::Header{{"Content-Type", "application/json"}});
-  if (r.status_code != 200)
-    throw std::runtime_error("unexpected status_code " +
-                             std::to_string(r.status_code));
-  json res = json::parse(r.text);
+  std::stringstream ent_f;
+  const std::string jsonSerialized = req.dump();
+
+  headers = curl_slist_append(headers, "Content-Type: application/json");
+  curl_easy_setopt(f, CURLOPT_URL, rpc_url_.c_str());
+  curl_easy_setopt(f, CURLOPT_COPYPOSTFIELDS, jsonSerialized.c_str());
+  curl_easy_setopt(f, CURLOPT_POST, 1);
+  curl_easy_setopt(f, CURLOPT_WRITEFUNCTION, CurlWrite);
+  curl_easy_setopt(f, CURLOPT_WRITEDATA, &ent_f);
+  curl_easy_setopt(f, CURLOPT_FAILONERROR, 1);
+  curl_easy_setopt(f, CURLOPT_HTTPHEADER, headers);
+  CURLcode b = curl_easy_perform(f);
+  curl_slist_free_all(headers);
+  if (b == CURLE_OK) ;
+  else
+    throw std::runtime_error("unexpected status_code ");
+  json res = json::parse(ent_f.str().c_str());
   const std::string encoded = res["result"]["value"]["blockhash"];
   return PublicKey::fromBase58(encoded);
 }
 Blockhash Connection::getLatestBlockhash(const std::string &commitment) {
   const json req = getBlockhashRequest(commitment, "getLatestBlockhash");
-  cpr::Response r =
-      cpr::Post(cpr::Url{rpc_url_}, cpr::Body{req.dump()},
-                cpr::Header{{"Content-Type", "application/json"}});
-  if (r.status_code != 200)
-    throw std::runtime_error("unexpected status_code " +
-                             std::to_string(r.status_code));
-  json res = json::parse(r.text);
+  std::stringstream ent_f;
+  const std::string jsonSerialized = req.dump();
+
+  headers = curl_slist_append(headers, "Content-Type: application/json");
+  curl_easy_setopt(f, CURLOPT_URL, rpc_url_.c_str());
+  curl_easy_setopt(f, CURLOPT_COPYPOSTFIELDS, jsonSerialized.c_str());
+  curl_easy_setopt(f, CURLOPT_POST, 1);
+  curl_easy_setopt(f, CURLOPT_WRITEFUNCTION, CurlWrite);
+  curl_easy_setopt(f, CURLOPT_WRITEDATA, &ent_f);
+  curl_easy_setopt(f, CURLOPT_FAILONERROR, 1);
+  curl_easy_setopt(f, CURLOPT_HTTPHEADER, headers);
+  CURLcode b = curl_easy_perform(f);
+  curl_slist_free_all(headers);
+  if (b == CURLE_OK) ;
+  else
+    throw std::runtime_error("unexpected status_code ");
+  
+  json res = json::parse(ent_f.str().c_str());
+
   const std::string encoded = res["result"]["value"]["blockhash"];
   const uint64_t lastValidBlockHeight =
       static_cast<uint64_t>(res["result"]["value"]["lastValidBlockHeight"]);
@@ -100,13 +123,24 @@ Blockhash Connection::getLatestBlockhash(const std::string &commitment) {
 
 uint64_t Connection::getBlockHeight(const std::string &commitment) {
   const json req = getBlockhashRequest(commitment, "getBlockHeight");
-  cpr::Response r =
-      cpr::Post(cpr::Url{rpc_url_}, cpr::Body{req.dump()},
-                cpr::Header{{"Content-Type", "application/json"}});
-  if (r.status_code != 200)
-    throw std::runtime_error("unexpected status_code " +
-                             std::to_string(r.status_code));
-  json res = json::parse(r.text);
+  std::stringstream ent_f;
+  const std::string jsonSerialized = req.dump();
+
+  headers = curl_slist_append(headers, "Content-Type: application/json");
+  curl_easy_setopt(f, CURLOPT_URL, rpc_url_.c_str());
+  curl_easy_setopt(f, CURLOPT_COPYPOSTFIELDS, jsonSerialized.c_str());
+  curl_easy_setopt(f, CURLOPT_POST, 1);
+  curl_easy_setopt(f, CURLOPT_WRITEFUNCTION, CurlWrite);
+  curl_easy_setopt(f, CURLOPT_WRITEDATA, &ent_f);
+  curl_easy_setopt(f, CURLOPT_FAILONERROR, 1);
+  curl_easy_setopt(f, CURLOPT_HTTPHEADER, headers);
+  CURLcode b = curl_easy_perform(f);
+  curl_slist_free_all(headers);
+  if (b == CURLE_OK) ;
+  else
+    throw std::runtime_error("unexpected status_code ");   
+  json res = json::parse(ent_f.str().c_str());
+
   const uint64_t blockHeight = res["result"];
   return blockHeight;
 }
@@ -124,30 +158,40 @@ std::string Connection::signAndSendTransaction(
   std::vector<uint8_t> txBody;
   tx.serializeTo(txBody);
 
-  const auto signature = keypair.privateKey.signMessage(txBody);
+  const auto signedtx = keypair.privateKey.signMessage(txBody);
   const auto b58Sig =
-      b58encode(std::string(signature.begin(), signature.end()));
+      b58encode(std::string(signedtx.begin(), signedtx.end())).second;
 
-  std::vector<uint8_t> signedTx;
-  solana::CompactU16::encode(1, signedTx);
-  signedTx.insert(signedTx.end(), signature.begin(), signature.end());
-  signedTx.insert(signedTx.end(), txBody.begin(), txBody.end());
+  std::vector<uint8_t> signedTransaction;
+  solana::CompactU16::encode(1, signedTransaction);
+  signedTransaction.insert(signedTransaction.end(), signedtx.begin(), signedtx.end());
+  signedTransaction.insert(signedTransaction.end(), txBody.begin(), txBody.end());
 
-  const auto b64tx = b64encode(std::string(signedTx.begin(), signedTx.end()));
+  const auto b64tx = b64encode(std::string(signedTransaction.begin(), signedTransaction.end()));
   const json req = sendTransactionRequest(b64tx, "base64", skipPreflight,
                                           preflightCommitment);
   const std::string jsonSerialized = req.dump();
+  std::stringstream ent_f;
 
-  cpr::Response r =
-      cpr::Post(cpr::Url{rpc_url_}, cpr::Body{jsonSerialized},
-                cpr::Header{{"Content-Type", "application/json"}});
-  if (r.status_code != 200)
-    throw std::runtime_error("unexpected status_code " +
-                             std::to_string(r.status_code));
+  headers = curl_slist_append(headers, "Content-Type: application/json");
+  curl_easy_setopt(f, CURLOPT_URL, rpc_url_.c_str());
+  curl_easy_setopt(f, CURLOPT_COPYPOSTFIELDS, jsonSerialized.c_str());
+  curl_easy_setopt(f, CURLOPT_POST, 1);
+  curl_easy_setopt(f, CURLOPT_WRITEFUNCTION, CurlWrite);
+  curl_easy_setopt(f, CURLOPT_WRITEDATA, &ent_f);
+  curl_easy_setopt(f, CURLOPT_FAILONERROR, 1);
+  curl_easy_setopt(f, CURLOPT_HTTPHEADER, headers);
+  CURLcode b = curl_easy_perform(f);
+  curl_slist_free_all(headers);
+  if (b == CURLE_OK) ;
+  else
+    throw std::runtime_error("unexpected status_code ");
 
-  json res = json::parse(r.text);
-  if (b58Sig != res["result"])
-    throw std::runtime_error("could not submit tx: " + r.text);
+  json res = json::parse(ent_f.str().c_str());
+
+  if (b58Sig == res["result"]) ;
+  else
+    throw std::runtime_error("could not submit tx: " + ent_f.str());
 
   return b58Sig;
 }

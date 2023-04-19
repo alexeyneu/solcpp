@@ -13,9 +13,9 @@ TEST_CASE("base58 decode & encode") {
 
   std::string resources_dir = FIXTURES_DIR;
   for (const auto& bs58 : bs58s) {
-    const auto decoded = solana::b58decode(bs58);
-    const auto encoded = solana::b58encode(decoded);
-    const auto redecoded = solana::b58decode(encoded);
+    const auto decoded = solana::b58decode(bs58).second;
+    const auto encoded = solana::b58encode(decoded).second;
+    const auto redecoded = solana::b58decode(encoded).second;
     std::ifstream fixture(resources_dir + "/base58/" + bs58, std::ios::binary);
     std::vector<char> buffer(std::istreambuf_iterator<char>(fixture), {});
 
