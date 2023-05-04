@@ -19,13 +19,8 @@ $ ./bin/tests # Run tests
 ## Dependencies  
 (installed by conan)  
 - C++17
-- boost 1.76.0 [Boost]
-- cpr 1.7.2 [MIT]
-- curl 7.81.0 [MIT]
-- doctest 2.4.8 [MIT]
-- sodium 1.0.18 [ISC]
-- nlohmann-json 3.10.5 [MIT]  
- 
+- cmake
+- conan io
 ## Notes
 - _If you have issues building libcurl on gcc-9, try clang. See
   [issue](https://github.com/curl/curl/issues/4821)._
