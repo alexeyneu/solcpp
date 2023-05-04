@@ -17,7 +17,6 @@ $ ./bin/tests # Run tests
 ```
 
 ## Dependencies  
-(installed by conan)  
 - C++17
 - cmake
 - conan io
