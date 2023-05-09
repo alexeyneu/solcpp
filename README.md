@@ -10,8 +10,8 @@ $ git clone https://github.com/mschneider/solcpp.git
 # Create a default profile or copy over the example for linux / macos
 $ conan profile detect
 $ cd solcpp && mkdir build && cd build
-$ conan install .. --build=missing -o:h boost/*:without_contract=True -o:h boost/*:without_fiber=True -o:h boost/*:without_graph=True -o:h boost/*:without_graph_parallel=True -o:h boost/*:without_json=True -o:h boost/*:without_log=True -o:h boost/*:without_math=True -o:h boost/*:without_mpi=True -o:h boost/*:without_nowide=True -o:h boost/*:without_program_options=True -o:h boost/*:without_python=True -o:h boost/*:without_stacktrace=True -o:h boost/*:without_test=True -o:h boost/*:without_timer=True -o:h boost/*:without_type_erasure=True -o:h boost/*:without_wave=True -s build_type=Release
-$ cmake .. -G "Unix Makefiles" -DCMAKE_TOOLCHAIN_FILE=../conan_toolchain.cmake -DCMAKE_POLICY_DEFAULT_CMP0091=NEW -DCMAKE_BUILD_TYPE=Release
+$ conan install .. --build=missing -s build_type=Release
+$ cmake .. -G "Unix Makefiles" -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_POLICY_DEFAULT_CMP0091=NEW -DCMAKE_BUILD_TYPE=Release
 $ cmake --build .
 $ ./bin/tests # Run tests
 ```
