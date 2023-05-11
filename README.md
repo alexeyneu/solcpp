@@ -6,9 +6,6 @@ A fast C++ SDK to interact with Solana and Mango Markets. The SDK also includes 
 
 The project uses [conan.io](https://conan.io/) to manage dependencies. Install Conan [here](https://conan.io/downloads.html).
 ```sh
-$ git clone https://github.com/mschneider/solcpp.git
-# Create a default profile or copy over the example for linux / macos
-$ conan profile detect
 $ cd solcpp && mkdir build && cd build
 $ conan install .. --build=missing -s build_type=Release
 $ cmake .. -G "Unix Makefiles" -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_POLICY_DEFAULT_CMP0091=NEW -DCMAKE_BUILD_TYPE=Release
